@@ -5,13 +5,13 @@ from __future__ import division # so that 1/3 = 0.33 instead of 1/3 = 0
 #2)Creates Moving Gabors
 #3)Presents a random auditory amplitude modulation
 #4)Allows participant to adjust the auditory amplitude modulation rate then move to next trial when satisfied
-
+from psychopy import visual
 import numpy as np
 import random
 import scipy.signal
 from threading import Thread
 from psychopy import prefs
-prefs.general['audioLib'] = ['pyo']
+prefs.general['audioLib'] = ['pygame'] # Windows = pygame mac = pyo
 from psychopy import sound
 from psychopy import *
 
@@ -38,7 +38,7 @@ sampleRate = 10000 # in HZ
 # Once you know how to modulate the pitch and Amplitude Modulation Rate figure out how to link its duration to key press
 
 # Set Gabor Values
-gratingSize = 15 # scalar in cm, can chage to x,y pair
+gratingSize = (400, 400) # scalar in cm, can chage to x,y pair
 gratingOpacity = 1.0 # The value should be a single float ranging 1.0 (opaque) to 0.0 (transparent).
 gratingPos = [0,0] # [0,0] is the center of the screen
 gratingOri = 0 # degrees
@@ -46,16 +46,16 @@ gratingOri = 0 # degrees
 fixationPos = [0,0]
 
 #Window 
-size = (800, 800)
+size = (1600, 900)
 
 # Keys
 allowedKeys = ['a', 's', 'd','esc', 'space']
 
 # Spatial Frequencies
 #1 is equivalent to one cycle per 'cm','deg', or 'pixel' depending on units value 
-lowSpatialFreq = .09 # .009
-medSpatialFreq = .4 # .04
-highSpatialFreq = .9 # .09
+lowSpatialFreq = .009
+medSpatialFreq = .04
+highSpatialFreq = .09
 #Temporal Frequencies # Figure out the cycles/cm and cycles/period
 lowTempFreq = .1 # 1 cycle per second
 medTempFreq = .4
@@ -78,7 +78,7 @@ Please Press Any Key to Begin
 """
 
 #Create a window and stimuli
-mywin = visual.Window(monitor='testMonitor', size = (800, 800), units='cm', allowGUI=False)# makes a window based on testMonitor Calibration
+mywin = visual.Window(size = size, units='pix')# monitor='testMonitor', size = (800, 800), units='cm', allowGUI=False)
 
 # Add participant GUI Here
 
@@ -97,12 +97,13 @@ def showGrating(grating):
         mywin.close()
         core.quit() 
 
-def showMovingGrating(grating,TempFreq,direction):
+def showMovingGrating(grating,TempFreq,direction, freq):
 #    global mywin 
-    toneOn = 0
+    toneOn = 1
     while True:
         if toneOn == 0:
-            playSound(500)
+            snd = sound.Sound(value=freq, loops=-1)
+            snd.play()
             toneOn = 1
         grating.setPhase(float(TempFreq), direction) 
         grating.draw()
@@ -110,6 +111,11 @@ def showMovingGrating(grating,TempFreq,direction):
         keys = event.getKeys(allowedKeys)
         if 's' in keys:
             break
+        elif 'a' in keys:
+            snd.stop()
+            snd = sound.Sound(value=freq + 100, loops=-1)
+            snd.play()
+            
     event.clearEvents
 #    mywin.close()
 #    core.quit() 
@@ -124,20 +130,18 @@ def showMovingGrating(grating,TempFreq,direction):
 def playSound(freq):
     snd = sound.Sound(value=freq, loops=-1)
     snd.play()
-#    adjustSound(freq, snd)
 #    while True:
 #        keys = event.getKeys(allowedKeys)
 #        if 'a' in keys:
 #            snd.stop()
 #            snd = sound.Sound(value=freq + 100, loops=-1)
 #            break 
-    snd.play()
 
-def showStim(trialStim):
+def showStim(trialStim, freq):
 #    mywin = visual.Window(monitor='testMonitor', size = (800, 800), units='cm', allowGUI=False)# makes a window based on testMonitor Calibration
     grating =createGratingStim(trialStim[0])
 #    playSound(500)
-    showMovingGrating(grating, trialStim[1], trialStim[2])
+    showMovingGrating(grating, trialStim[1], trialStim[2], freq)
 
 
 def showInstructions(text):
@@ -149,14 +153,19 @@ def showInstructions(text):
         event.clearEvents()
         win.close()
         core.quit() 
-        
+
+# create grating stim
+#y = createGratingStim(highSpatialFreq)
+#showGrating(y)
 #Test Grating Presentation
-#x = [lowSpatialFreq, lowTempFreq, left]
+#x = [highSpatialFreq, lowTempFreq, left]
 #showStim(x)
 
 # Test Sound Presentation
 #playSound(500)
 
+
+#Opens txt with all trial conditions
 trialfile = open('gaborMotionTrials.txt', 'r')
 trialList = []
 print trialfile
@@ -173,7 +182,7 @@ random.shuffle(trialList) # replace with predetermined trial order list
 #Experiment Engine
 for trial in trialList:
     print trial
-    showStim(trial)
+    showStim(trial, 500)
 
 ##Graveyard
 

@@ -12,9 +12,9 @@ trialfile.close
 
 # Spatial Frequencies
 #1 is equivalent to one cycle per 'cm','deg', or 'pixel' depending on units value 
-lowSpatialFreq = .09 # .009
-medSpatialFreq = .4 # .04
-highSpatialFreq = .9 # .09
+lowSpatialFreq = .009
+medSpatialFreq = .04
+highSpatialFreq = .9 #.09
 #Temporal Frequencies # Figure out the cycles/cm and cycles/period
 lowTempFreq = .1 # 1 cycle per second
 medTempFreq = .4
