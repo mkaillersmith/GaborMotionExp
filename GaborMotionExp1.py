@@ -6,8 +6,7 @@ from __future__ import division # so that 1/3 = 0.33 instead of 1/3 = 0
 #3)Presents a random auditory amplitude modulation
 #4)Allows participant to adjust the auditory amplitude modulation rate then move to next trial when satisfied
 from psychopy import visual
-import numpy as np
-import random
+import math, datetime, numpy as np, random, os
 import scipy.signal
 from threading import Thread
 from psychopy import prefs
@@ -15,7 +14,8 @@ prefs.general['audioLib'] = ['pygame'] # Windows = pygame mac = pyo
 from psychopy import sound
 from psychopy import *
 
-# play a tone to initialize
+randomizer = 1
+
 
 # Sound Values
 duration = 0.5 # 500ms
@@ -30,14 +30,7 @@ time = 3
 phase = 0
 sampleRate = 10000 # in HZ
 
-#Or by giving an Nx2 numpy array of floats (-1:1) you can specify the sound yourself as a waveform
-# sampleRate (= 44100): if the psychopy.sound.init() function has been
-#called or if another sound has already been created then this argument will be ignored and the previous setting will be used
-#bits: has no effect for the pyo backend hamming: whether to apply a Hamming window (5ms) for generated tones.
-#Not applied to sounds from files. 
-# Once you know how to modulate the pitch and Amplitude Modulation Rate figure out how to link its duration to key press
-
-# Set Gabor Values
+# Gabor Values
 gratingSize = (400, 400) # scalar in cm, can chage to x,y pair
 gratingOpacity = 1.0 # The value should be a single float ranging 1.0 (opaque) to 0.0 (transparent).
 gratingPos = [0,0] # [0,0] is the center of the screen
@@ -45,8 +38,12 @@ gratingOri = 0 # degrees
 # Fixation Stim Vaues
 fixationPos = [0,0]
 
-#Window 
-size = (1600, 900)
+# Window 
+size = (1920, 1080)
+
+
+#Create a window and stimuli
+#mywin = visual.Window(size = size, units='pix')# monitor='testMonitor', size = (800, 800), units='cm', allowGUI=False)
 
 # Keys
 allowedKeys = ['a', 's', 'd','esc', 'space']
@@ -64,12 +61,18 @@ highTempFreq = .8
 left = '-'
 right = '+'
 
-# testSound
-#snd = sound.Sound(toneFrequencyValue)
-#snd.play()
+# Adjust 
+minStartFreqMod = .5
+maxStartFreqMod = 4
+
+adjustIncrement = .5
+
+minFreqModRate = .5
+maxFreqModRate = 10
+
 
 # Instructions
-instructions = """You will be presented with contrasting lines and asked to adjust the auditory freqquency to correspond with the moving contrasting lines
+instructions = """You will be presented with contrasting lines and asked to adjust the auditory frequency to correspond with the moving contrasting lines
 The Right Key or D Key will make the auditory frequency faster.
 The Left Key or A Key will make the auditory frequency slower.
 Press the S Key when you have finished adjusting. 
@@ -77,10 +80,18 @@ Press the S Key when you have finished adjusting.
 Please Press Any Key to Begin
 """
 
-#Create a window and stimuli
-mywin = visual.Window(size = size, units='pix')# monitor='testMonitor', size = (800, 800), units='cm', allowGUI=False)
-
 # Add participant GUI Here
+
+def showInstructions(text): # uses psychopy textStim to show the task instructions
+    win= visual.Window(size)
+    instructions = visual.TextStim(win, text, pos=(0,0), color='white', height=0.085)
+    while True:
+        instructions.draw()
+        win.flip()
+        keys = event.getKeys()
+        if len(keys)> 0:
+            break
+        
 
 def createGratingStim(spatialFreq):
 #    global mywin
@@ -88,81 +99,132 @@ def createGratingStim(spatialFreq):
 #    print grating
     return grating
 
-def showGrating(grating):
-#    global mywin
-    grating.draw()
-    mywin.flip()   
-    if len(event.getKeys())>0:
-        event.clearEvents()
-        mywin.close()
-        core.quit() 
+def makeAMSound(freq):
+    clock = core.Clock()
+
+    print 'initial frequency = ', freq
+    duration = 0.5 # 500ms
+    fs = 10000 # frequency sample rate 
+    f = 110 # the frequency of the signal
+    ft = 1 # this is the varuable that needs to be adjusted
+    A = .45 # amplitude
+    modulationRate = freq # modulation frequency
+    modulationIndex = 1 # 100% modulation
+
+    waveLength = np.arange(fs) # the points on the x axis for plotting
+
+    # Computes the value (amplitude) of the sin wave at the for each sample
+    carrierWave = np.array([A*math.sin(2*np.pi*f * (i/fs)) for i in np.arange(fs)]) # i/fs = time
+    modulationWave = np.array([modulationIndex*math.sin(2*np.pi*modulationRate*(i/fs)) for i in np.arange(fs)])
+
+#    print waveLength.shape
+#    print modulationWave.shape
+#    print carrierWave.shape
+
+    #Calculates Amplitude Modulated Sound
+    AmSound = carrierWave*modulationWave
+
+    # White Noise
+    mean = 0
+    std = 1 
+    whiteNoise = np.random.normal(mean, std, size=fs) 
+
+    samples = AmSound * whiteNoise
+    return samples
+
 
 def showMovingGrating(grating,TempFreq,direction, freq):
 #    global mywin 
-    toneOn = 1
+    toneOn = 0
     while True:
-        if toneOn == 0:
-            snd = sound.Sound(value=freq, loops=-1)
-            snd.play()
-            toneOn = 1
+        keys = event.getKeys(allowedKeys)
         grating.setPhase(float(TempFreq), direction) 
         grating.draw()
-        mywin.flip()   
-        keys = event.getKeys(allowedKeys)
-        if 's' in keys:
-            break
+        mywin.flip() 
+        if toneOn == 0:
+            snd = sound.Sound(freq, loops=-1)
+            snd.play()
+            core.wait(.1)
+            toneOn = 1
         elif 'a' in keys:
             snd.stop()
-            snd = sound.Sound(value=freq + 100, loops=-1)
-            snd.play()
-            
+            adjust = 'lower'
+            return adjust
+            break
+        elif 'd' in keys:
+            snd.stop()
+            adjust = 'higher'
+            return adjust
+            break
+        elif 's' in keys:
+            snd.stop()
+            adjust = 'done'
+            return adjust
+            break
     event.clearEvents
-#    mywin.close()
-#    core.quit() 
-#def adjustSound(freq, snd): # only play sound as long as needed
-#    while True:
-#        keys = event.getKeys(allowedKeys)
-#        if 'a' in keys:
-#            snd.stop()
-#            snd = sound.Sound(value=freq + 100, loops=-1)
-#            return snd
-#            
-def playSound(freq):
-    snd = sound.Sound(value=freq, loops=-1)
-    snd.play()
-#    while True:
-#        keys = event.getKeys(allowedKeys)
-#        if 'a' in keys:
-#            snd.stop()
-#            snd = sound.Sound(value=freq + 100, loops=-1)
-#            break 
 
-def showStim(trialStim, freq):
-#    mywin = visual.Window(monitor='testMonitor', size = (800, 800), units='cm', allowGUI=False)# makes a window based on testMonitor Calibration
+def showStim(trialStim, freq): # trialStim[0] = spatialFreq, trialStim[1] = TempFreq, trialStim[2] = Direction, trialStim[3] = intial
     grating =createGratingStim(trialStim[0])
-#    playSound(500)
-    showMovingGrating(grating, trialStim[1], trialStim[2], freq)
+    # play intitalsound and grating
+    makeSample = 0
+    while True:
+        print 'frequency = ', freq
+        if makeSample == 0:
+            AMSample = makeAMSound(freq)
+            makeSample = 1
+        adjust = showMovingGrating(grating, trialStim[1], trialStim[2], AMSample)
+        print 'adjust is:', adjust
+        if adjust == 'higher':
+            if freq >= maxFreqModRate: # 
+                freq = freq
+                makeSample = 0
+            else:
+                freq += adjustIncrement
+                makeSample = 0
+        elif adjust == 'lower':
+            if freq <= minFreqModRate:
+                freq = freq
+                makeSample = 0
+            else:
+                freq -= adjustIncrement
+                makeSample = 0
+        elif adjust == 'done':
+            responseFreq = freq
+            print 'response freq = ', responseFreq
+            return responseFreq
 
+def convertTrialNum(trial):
+    if trial < 10:
+        trial_num = '00' +str(trial)
+    elif trial >=10 and trial < 100:
+        trial_num = '0'+ str(trial)
+    elif trial >= 100:
+        trial_num = trial
+    return trial_num
+    
+def convertSpatialFreq(sf):
+    spatialFreq = sf
+    if spatialFreq == .04:
+        spatialFreq = str(sf)+' '
+    elif spatialFreq == .9:
+        spatialFreq = str(sf)+'  '
+    return spatialFreq
 
-def showInstructions(text):
-    win = visual.Window(size)
-    instruction = visual.TextStim(win, text, pos=(0,0), color='white') # height=0.038
-    instruction.draw()
-    win.flip
-    if len(event.getKeys())>0:
-        event.clearEvents()
-        win.close()
-        core.quit() 
+# Creates dialog box to enter subject number, condition, and block info
+expName = 'None'  # from the Builder filename that created this script
+expInfo = {'Participant': "000", 'Condition': '0', 'Block': '0'}
+dlg = gui.DlgFromDict(dictionary=expInfo, title=expName)
+if dlg.OK == False: core.quit()  # user pressed cancel
+expInfo['date'] = datetime.datetime.now().strftime("%d-%m-%y\nTime: %H:%M:%S")  # add a simple timestamp
 
-# create grating stim
-#y = createGratingStim(highSpatialFreq)
-#showGrating(y)
-#Test Grating Presentation
-#x = [highSpatialFreq, lowTempFreq, left]
-#showStim(x)
+if not os.path.isdir('data'):
+    os.makedirs('data')
 
-# Test Sound Presentation
-#playSound(500)
+subj = str(expInfo['Participant'])
+con = eval(expInfo['Condition'])
+block = eval(expInfo['Block'])
+
+file_log = "C:\\lab users\\GaborMotionExp-master\\logging.txt"
 
 
 #Opens txt with all trial conditions
@@ -173,46 +235,45 @@ for line in trialfile:
     trials = line.split()
     print trials
     trialList.append(trials)
-print len(trialList)
-random.shuffle(trialList) # replace with predetermined trial order list
+print 'number of trials = ', len(trialList)
+if randomizer == 1:
+    random.shuffle(trialList) # replace with predetermined trial order list
 
-#showInstructions(instructions)
+#resume = expInfo['Resuming?']
+resume = 0
+# Writes experiment information subject log file
+if resume == 0:
+    print "not resuming"
+    log_file = open("data\\WhiteNoiseExp_sub%scon%1iblk%2i.txt" % (subj, con, block), 'w')
+    log_file.write("Experiment Began: " + datetime.datetime.now().strftime("Experiment Ended: %H:%M:%S\n\n"))
+    log_file.write('Total Trials = %i\n' % len(trialList)) # 150 trials
+    log_file.write("trial_num SpatialFreq TemporalFreq Direction Response elapsed_time\n")
+    log_file.close()
+    trial_num = 0
+elif resume == 1:
+    t_log_file = open("data\\sub%scon%1i%blk%2i.txt" % (subj, con, block), 'r')
+    t_log = t_log_file.readlines()
+    t_log_file.close()
+    t_log - t_log[-1].split(" ")
+    trial_num = int(t_log[0])
+    
+mywin = visual.Window(size = size, units='pix')# monitor='testMonitor', size = (800, 800), units='cm', allowGUI=False)
 
+showInstructions(instructions)
+
+
+allFrequencyModulations = np.arange(1.5, 19.5,.5)
+possibleFrequencyModulations = np.arange(minStartFreqMod, maxStartFreqMod, .5)
+print 'possible FMs: ', possibleFrequencyModulations
 
 #Experiment Engine
 for trial in trialList:
-    print trial
-    showStim(trial, 500)
-
-##Graveyard
-
-# Moving Gratings!
-#def showBistableGratingMotion(gratingLeft, gratingRight, grating1, grating2): # 
-#    while True:
-#        gratingLeft.setPhase(phaser, '-')
-#        gratingRight.setPhase(phaser, '+')
-#        grating1.setPhase(phaser, '-') 
-#        grating2.setPhase(phaser, '+')
-#        gratingLeft.draw()
-#        gratingRight.draw()
-#        grating1.draw()
-#        grating2.draw()
-#        mywin.flip()   
-#        if len(event.getKeys())>0: break
-#    event.clearEvents()
-#    mywin.close()
-#    core.quit() 
-#    
-#def showBistableGratings(gratingLeft, gratingRight, grating1, grating2): # 
-#    while True:
-#        gratingLeft.draw()
-#        gratingRight.draw()
-#        grating1.draw()
-#        grating2.draw()
-#        mywin.flip()   
-#        if len(event.getKeys())>0: break
-#    event.clearEvents()
-#    mywin.close()
-
-#showBistableGratingMotion(gratingLeft, gratingRight, grating1, grating2)  
-#showBistableGratings(gratingLeft, gratingRight, grating1, grating2) #  
+    trial_num += 1
+    trialConvert = convertTrialNum(trial_num)
+#    spatialFreqConvert = convertSpatialFreq(trial[0])
+    print 'Trial = ', trial
+    intitialFrequency = random.choice(possibleFrequencyModulations)
+    response = showStim(trial, intitialFrequency)
+    log_file = open("data\\WhiteNoiseExp_sub%scon%1iblk%2i.txt" % (subj, con, block), 'a')
+    log_file.write('%s %s %s %s %.1f %.1f\n' % (trialConvert, trial[0], trial[1], trial[2], intitialFrequency, response))
+    log_file.close()
